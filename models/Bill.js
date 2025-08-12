@@ -2,6 +2,11 @@ const { Schema, model } = require("mongoose");
 
 const billSchema = new Schema(
   {
+    doctorId: {
+      type: Schema.Types.ObjectId,
+      ref: "Doctor",
+      required: true,
+    },
     appointmentId: {
       type: Schema.Types.ObjectId,
       ref: "Appointment",

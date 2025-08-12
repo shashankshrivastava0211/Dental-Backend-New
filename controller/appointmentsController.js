@@ -1,15 +1,26 @@
 const appointment = require("../models/appointment");
 const Prescription = require("../models/Prescription");
 const User = require("../models/User");
+const Doctor = require("../models/Dr");
 const { appointmentCreatedMessage } = require("../Templates/smsTemplates");
 const { sendSMS } = require("../Utility/smsUtility");
+const { sendNewAppointmentNotification } = require("../Utility/emailUtility");
 
 exports.createAppointment = async (req, res) => {
   try {
     console.log(req.body);
     const appointmentForPatient = new appointment(req.body);
 
-    const { phoneNo } = req.body;
+    const { phoneNo, doctorId } = req.body;
+
+    // Validate doctor exists
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      return res.status(400).json({
+        success: false,
+        message: "Doctor not found",
+      });
+    }
 
     let user = await User.findOne({ phoneNo });
 
@@ -23,7 +34,35 @@ exports.createAppointment = async (req, res) => {
 
     await appointmentForPatient.save();
 
-    res.status(201).json(appointmentForPatient);
+    // Send email notification to doctor about new appointment
+    if (doctor.email) {
+      try {
+        await sendNewAppointmentNotification(doctor.email, doctor.name, {
+          patientName: appointmentForPatient.patientName,
+          date: appointmentForPatient.date,
+          time: appointmentForPatient.time,
+          phoneNo: appointmentForPatient.phoneNo,
+          age: appointmentForPatient.age,
+          gender: appointmentForPatient.gender,
+          description: appointmentForPatient.description,
+        });
+        console.log(
+          `New appointment notification email sent to Dr. ${doctor.name}`
+        );
+      } catch (emailError) {
+        console.error(
+          "Failed to send new appointment email notification:",
+          emailError
+        );
+        // Don't fail the appointment creation if email fails
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Appointment created successfully and doctor notified",
+      appointment: appointmentForPatient,
+    });
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ message: "Server Error" });
